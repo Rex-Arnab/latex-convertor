@@ -124,7 +124,7 @@ Any `false` means that tool isn't on `PATH` — revisit step 1.
 
 ### 1. System packages
 
-Easiest via **winget** (built into Windows 10/11) in PowerShell:
+Easiest via **winget**, in PowerShell:
 
 ```powershell
 winget install --id JohnMacFarlane.Pandoc -e
@@ -132,7 +132,11 @@ winget install --id TheDocumentFoundation.LibreOffice -e
 winget install --id Python.Python.3.13 -e
 ```
 
-Or with **Chocolatey**:
+> `winget` ships with **Windows 10/11 desktop** only. On **Windows Server** it is
+> generally absent (it depends on the Store / App Installer), so use the
+> Chocolatey commands below instead — the rest of this guide is unchanged.
+
+Or with **Chocolatey**, which works on desktop and Server alike:
 
 ```powershell
 choco install pandoc libreoffice-fresh python
@@ -478,3 +482,9 @@ The Linux instructions above were run end-to-end in a clean `ubuntu:24.04`
 container (arm64): all three engines came up, and markdown→docx, literal-LaTeX
 OMML, markdown→PDF, and legacy `.doc`→docx all succeeded. Bengali rendered in PDF
 with the `Lohit-Bengali` font embedded, confirming `fonts-beng` does its job.
+
+**The Windows instructions have not been executed end-to-end.** They are derived
+from the code — `engines.py` locates LibreOffice via `PATH` only, and
+`detection.py` guards the `magic` import — so the two ⚠️ steps are the known
+failure points rather than guesses. Treat the rest as unverified until someone
+runs it on a real Windows box; corrections welcome.
