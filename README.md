@@ -60,10 +60,14 @@ Python **3.10+** (developed and deployed on 3.13).
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-pip python3-venv \
+sudo apt install -y python3 python3-pip python3-venv curl \
                     pandoc libreoffice libmagic1 \
                     fonts-beng fonts-noto
 ```
+
+> On Ubuntu 24.04 the `libmagic1` package was renamed `libmagic1t64` by the
+> 64-bit `time_t` transition. The command above still works — the new package
+> provides the old name — so install it exactly as written.
 
 **Fedora / RHEL:**
 
@@ -407,11 +411,70 @@ pathshala*.doc(x)        test fixtures
 
 ## Testing it works
 
+### Test 1 — markdown → docx
+
 ```bash
 printf 'Energy is $E = mc^2$ and area is $$A = \\pi r^2$$\n' > /tmp/test.md
 curl -D - -X POST http://localhost:8100/convert \
      -F "file=@/tmp/test.md" -o /tmp/test.docx
 ```
 
-Expect `X-Equations-Converted: 2` and `X-Latex-Unparsed: 0`. Open `/tmp/test.docx`
-in Word and click an equation — it should be editable, not a picture.
+Expect `200 OK` and `X-Engine-Used: pandoc+omml`.
+
+**`X-Equations-Converted` will read `0` here — that is correct, not a failure.**
+Pandoc understands `$...$` in markdown and emits Word equations itself, so by the
+time the OMML pass runs there is no literal LaTeX left to convert. The counters
+report only what *that pass* did.
+
+Verify the equations really are there:
+
+```bash
+python3 -c "
+import zipfile
+d = zipfile.ZipFile('/tmp/test.docx').read('word/document.xml').decode('utf8')
+print('equations:', d.count('<m:oMath'), '| literal \$ left:', d.count('\$'))"
+```
+
+Expect a non-zero equation count and `0` dollar signs remaining. Open the file in
+Word and click an equation — it should be editable, not a picture.
+
+### Test 2 — the OMML pass itself
+
+The custom pass exists for LaTeX that survives as **literal text**, which is what
+happens with a `.docx` where someone typed the dollar signs by hand. Build one
+(run with the virtualenv active — this uses `python-docx`):
+
+```bash
+python3 -c "
+from docx import Document
+d = Document()
+d.add_paragraph('Energy is \$E = mc^2\$ and area is \$A = \\\\pi r^2\$ here.')
+d.add_paragraph('Fraction: \$\\\\frac{a}{b}\$ done.')
+d.save('/tmp/literal.docx')"
+
+curl -D - -X POST http://localhost:8100/convert \
+     -F "file=@/tmp/literal.docx" -o /tmp/literal_out.docx
+```
+
+Here the counters do move — expect `X-Latex-Spans: 3`,
+`X-Equations-Converted: 3`, `X-Latex-Unparsed: 0`.
+
+### Test 3 — PDF and legacy input
+
+```bash
+curl -D - -X POST http://localhost:8100/convert \
+     -F "file=@/tmp/test.md" -F "target=pdf" -o /tmp/out.pdf   # pandoc+omml+libreoffice
+curl -D - -X POST http://localhost:8100/convert \
+     -F "file=@old.doc" -o /tmp/out.docx                        # libreoffice+omml
+```
+
+`X-Engine-Used` should name the full chain in each case.
+
+---
+
+## Verified environments
+
+The Linux instructions above were run end-to-end in a clean `ubuntu:24.04`
+container (arm64): all three engines came up, and markdown→docx, literal-LaTeX
+OMML, markdown→PDF, and legacy `.doc`→docx all succeeded. Bengali rendered in PDF
+with the `Lohit-Bengali` font embedded, confirming `fonts-beng` does its job.
